@@ -108,7 +108,7 @@ phase1_routers:
       - type: "technical"
         path: "./technical-steps/step-01-init.md"
         condition: "research_type == 'technical'"
-        gate: "track == 'enterprise'"
+        gate: 'track == "enterprise"'
         gate_message: "Technical research is available only in enterprise track"
         agent: "analyst"
 
@@ -139,19 +139,19 @@ phase1_routers:
     routes:
       - type: "method-greenfield"
         path: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/method-greenfield.yaml"
-        condition: "selected_track == 'method' AND field_type == 'greenfield'"
+        condition: "selected_track == 'method' and field_type == 'greenfield'"
 
       - type: "method-brownfield"
         path: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/method-brownfield.yaml"
-        condition: "selected_track == 'method' AND field_type == 'brownfield'"
+        condition: "selected_track == 'method' and field_type == 'brownfield'"
 
       - type: "enterprise-greenfield"
         path: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/enterprise-greenfield.yaml"
-        condition: "selected_track == 'enterprise' AND field_type == 'greenfield'"
+        condition: "selected_track == 'enterprise' and field_type == 'greenfield'"
 
       - type: "enterprise-brownfield"
         path: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/enterprise-brownfield.yaml"
-        condition: "selected_track == 'enterprise' AND field_type == 'brownfield'"
+        condition: "selected_track == 'enterprise' and field_type == 'brownfield'"
 
 # =============================================================================
 # INJECTION POINTS

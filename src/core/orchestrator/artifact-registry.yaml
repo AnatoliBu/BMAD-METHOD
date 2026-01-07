@@ -1,6 +1,10 @@
 # Artifact Registry
 # Implements Principle #5: Artifact Propagation Is Mandatory
 # Every artifact produced in Phase 1 must be registered in the canonical workflow status.
+#
+# PLACEHOLDER FORMATS:
+# - {date} - ISO 8601 date format: YYYY-MM-DD (e.g., 2024-01-15)
+# - {topic} - Sanitized topic name (lowercase, hyphens for spaces)
 
 name: artifact-registry
 version: "1.0.0"

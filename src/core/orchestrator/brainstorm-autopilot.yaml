@@ -1,5 +1,10 @@
 # Brainstorm Autopilot
 # Implements Principles #13 and #14: Autopilot mode for brainstorm step
+#
+# PLACEHOLDER FORMATS:
+# - {timestamp} - ISO 8601 datetime format: YYYY-MM-DDTHH-MM-SS (e.g., 2024-01-15T14-30-00)
+#   Note: Colons are replaced with hyphens for filesystem compatibility
+# - {iteration_number} - Integer iteration counter (1, 2, 3, ...)
 
 name: brainstorm-autopilot
 version: "1.0.0"
@@ -98,7 +103,7 @@ agents:
 # INTERMEDIATE ARTIFACTS
 # =============================================================================
 intermediate_artifacts:
-  storage_path: "{planning_artifacts}/analysis/.intermediate/"
+  storage_path: "{planning_artifacts}/analysis/intermediate/"
 
   explorations:
     id: "explorations"
@@ -198,7 +203,7 @@ completion_criteria:
       description: "Bounded list of open questions (if any)"
       validation:
         - "If section exists, contains 10 or fewer items"
-        - "Each question ends with '?'"
+        - "Each question contains a '?' character (it may be followed by other punctuation)"
       optional: true
 
   evaluation_order:

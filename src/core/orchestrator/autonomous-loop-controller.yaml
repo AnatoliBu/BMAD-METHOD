@@ -68,7 +68,7 @@ phase1_loops:
         action: "complete_success"
 
       - id: "convergence_detected"
-        condition: "new_ideas_count < 3 for last 2 iterations"
+        condition: "new_ideas_count_prev_1 < 3 and new_ideas_count_prev_2 < 3"
         priority: 2
         action: "complete_with_convergence"
 

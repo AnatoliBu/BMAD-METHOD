@@ -100,7 +100,7 @@ phase1_checklists:
         required: true
 
       - id: "open_questions_bounded"
-        criteria: "Open questions list has 10 or fewer items"
+        criteria: "Open questions section is absent or, if present, the list has 10 or fewer items"
         check: |
           NOT section_exists(output, "Open Questions") OR
           list_item_count(section) <= 10
@@ -199,8 +199,8 @@ phase1_checklists:
       - id: "all_required_complete"
         criteria: "All required workflows completed or skipped"
         check: |
-          foreach(workflow in required_workflows) ->
-            status[workflow] is file_path OR status[workflow] == "skipped"
+          foreach(workflow_status in status) ->
+            workflow_status == "skipped" OR file_exists(workflow_status)
         required: true
 
       - id: "artifacts_registered"

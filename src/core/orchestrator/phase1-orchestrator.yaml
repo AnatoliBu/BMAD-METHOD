@@ -1,6 +1,11 @@
 # Phase 1 Orchestrator - Orchestrated Execution Layer for BMAD v6
 # This orchestrator enables autonomous, stateful execution of Phase 1 (Analysis)
 # while faithfully preserving BMAD v6 semantics.
+#
+# PLACEHOLDER FORMATS:
+# - {date} - ISO 8601 date format: YYYY-MM-DD (e.g., 2024-01-15)
+# - {timestamp} - ISO 8601 datetime format: YYYY-MM-DDTHH-MM-SS (e.g., 2024-01-15T14-30-00)
+#   Note: Colons in timestamps are replaced with hyphens for filesystem compatibility
 
 name: phase1-orchestrator
 version: "1.0.0"
@@ -61,17 +66,17 @@ status_abstraction:
       parser: "markdown-frontmatter"
 
   supported_locations:
-    - path: "{project-root}/bmm-workflow-status.yaml"
-      priority: 1
-    - path: "{project-root}/bmm-workflow-status.md"
-      priority: 2
-    - path: "docs/bmm-workflow-status.yaml"
-      priority: 3
-    - path: "docs/bmm-workflow-status.md"
-      priority: 4
     - path: "{planning_artifacts}/bmm-workflow-status.yaml"
-      priority: 5
+      priority: 1
     - path: "{planning_artifacts}/bmm-workflow-status.md"
+      priority: 2
+    - path: "{project-root}/bmm-workflow-status.yaml"
+      priority: 3
+    - path: "{project-root}/bmm-workflow-status.md"
+      priority: 4
+    - path: "docs/bmm-workflow-status.yaml"
+      priority: 5
+    - path: "docs/bmm-workflow-status.md"
       priority: 6
 
   required_fields:
@@ -163,7 +168,7 @@ routers:
       - type: "technical"
         path: "./technical-steps/step-01-init.md"
         condition: "research_type == 'technical'"
-        gate: "track == 'enterprise'" # Technical research gated by track
+        gate: 'track == "enterprise"' # Technical research gated by track
 
 # =============================================================================
 # CHECKLIST EVALUATION (Principle #8)
@@ -244,13 +249,13 @@ brainstorm_autopilot:
   intermediate_artifacts:
     - name: "explorations"
       description: "Creative alternatives explored by explorer agent"
-      path: "{planning_artifacts}/analysis/.intermediate/explorations-{timestamp}.md"
+      path: "{planning_artifacts}/analysis/intermediate/explorations-{timestamp}.md"
     - name: "alternatives"
       description: "Alternative approaches considered"
-      path: "{planning_artifacts}/analysis/.intermediate/alternatives-{timestamp}.md"
+      path: "{planning_artifacts}/analysis/intermediate/alternatives-{timestamp}.md"
     - name: "rejected_options"
       description: "Options explicitly rejected with rationale"
-      path: "{planning_artifacts}/analysis/.intermediate/rejected-{timestamp}.md"
+      path: "{planning_artifacts}/analysis/intermediate/rejected-{timestamp}.md"
 
   completion_criteria:
     description: "Artifact-driven completion (not conversational exhaustion)"
