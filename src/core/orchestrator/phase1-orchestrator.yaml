@@ -1,0 +1,358 @@
+# Phase 1 Orchestrator - Orchestrated Execution Layer for BMAD v6
+# This orchestrator enables autonomous, stateful execution of Phase 1 (Analysis)
+# while faithfully preserving BMAD v6 semantics.
+
+name: phase1-orchestrator
+version: "1.0.0"
+description: |
+  Orchestrated execution layer for BMAD v6 Phase 1 (Analysis).
+  Enables autonomous workflow execution while maintaining compatibility
+  with existing BMAD v6 workflows, artifacts, and downstream phases.
+
+# =============================================================================
+# CORE PRINCIPLES (from system prompt)
+# =============================================================================
+principles:
+  - id: bmad-source-of-truth
+    rule: "BMAD workflows, file structure, and artifacts define reality"
+    enforcement: "All behavior derived from on-disk workflow assets"
+
+  - id: structural-orchestration
+    rule: "Phase 1 is executed as a stateful workflow, not a long chat"
+    enforcement: "Progress and decisions stored in artifacts, not chat history"
+
+  - id: deterministic-execution
+    rule: "workflow.yaml declares what may happen; orchestrator only executes"
+    enforcement: "Step order, agents, templates, routers, checklists from assets"
+
+  - id: canonical-gate
+    rule: "Track selection performed only via workflow-init"
+    enforcement: "Phase 1 skip only if selected track explicitly allows"
+
+  - id: artifact-propagation
+    rule: "Every artifact must be registered in canonical workflow status"
+    enforcement: "Unregistered artifacts do not exist"
+
+  - id: bounded-autonomy
+    rule: "Autonomous loops have max depth, max iterations, stop conditions"
+    enforcement: "Incompleteness recorded as blocked/low-confidence/open-questions"
+
+  - id: compatibility
+    rule: "Prefer compatibility over architectural elegance"
+    enforcement: "Support .bmad/ vs _bmad/ aliases and format drift"
+
+  - id: contract-not-narrative
+    rule: "Phase 1 ends with contract readable by Phase 2"
+    enforcement: "Final synthesis is artifact, not opinion"
+
+  - id: replaceable
+    rule: "Orchestrator can be swapped without changing workflow assets"
+    enforcement: "If removal breaks BMAD semantics, design is wrong"
+
+# =============================================================================
+# WORKFLOW STATUS ABSTRACTION (Principle #6)
+# =============================================================================
+status_abstraction:
+  description: "Workflow status is an abstraction, not a file"
+  supported_formats:
+    - extension: ".yaml"
+      parser: "yaml"
+    - extension: ".md"
+      parser: "markdown-frontmatter"
+
+  supported_locations:
+    - path: "{project-root}/bmm-workflow-status.yaml"
+      priority: 1
+    - path: "{project-root}/bmm-workflow-status.md"
+      priority: 2
+    - path: "docs/bmm-workflow-status.yaml"
+      priority: 3
+    - path: "docs/bmm-workflow-status.md"
+      priority: 4
+    - path: "{planning_artifacts}/bmm-workflow-status.yaml"
+      priority: 5
+    - path: "{planning_artifacts}/bmm-workflow-status.md"
+      priority: 6
+
+  required_fields:
+    - name: "artifacts"
+      type: "object"
+      description: "Map of artifact_id -> file_path or status"
+    - name: "phase_attribution"
+      type: "object"
+      description: "Map of artifact_id -> phase number"
+    - name: "confidence"
+      type: "object"
+      description: "Map of artifact_id -> confidence level (high/medium/low)"
+    - name: "key_findings"
+      type: "array"
+      optional: true
+      description: "List of key findings from analysis"
+
+  commands:
+    - name: "/workflow-status"
+      action: "Read and display resolved status from first found location"
+    - name: "/workflow-status --update"
+      action: "Update status file with new artifact or finding"
+
+# =============================================================================
+# PHASE 1 WORKFLOW STEPS
+# =============================================================================
+phase1_steps:
+  - step: "workflow-init"
+    description: "Track selection and project initialization"
+    required: true
+    interactive: true
+    agent: "analyst"
+    workflow_path: "{project-root}/_bmad/bmm/workflows/workflow-status/init/workflow.yaml"
+    outputs:
+      - artifact: "workflow-status"
+        path: "{planning_artifacts}/bmm-workflow-status.yaml"
+
+  - step: "brainstorm"
+    description: "Interactive brainstorming session"
+    required: false
+    interactive: true
+    supports_autopilot: true
+    agent: "analyst"
+    workflow_path: "{project-root}/_bmad/core/workflows/brainstorming/workflow.md"
+    outputs:
+      - artifact: "brainstorm-session"
+        path: "{planning_artifacts}/analysis/brainstorm-session-{date}.md"
+    completion_criteria:
+      - "project_brief exists"
+      - "assumptions list exists"
+      - "research_plan exists"
+      - "open_questions bounded (max 10 items)"
+
+  - step: "research"
+    description: "Comprehensive research with routing"
+    required: false
+    interactive: true
+    agent: "analyst"
+    workflow_path: "{project-root}/_bmad/bmm/workflows/1-analysis/research/workflow.md"
+    router: "research-type-router"
+    outputs:
+      - artifact: "research-{type}"
+        path: "{planning_artifacts}/research/{type}-research-{date}.md"
+
+  - step: "product-brief"
+    description: "Product brief creation"
+    required: false
+    interactive: true
+    agent: "analyst"
+    workflow_path: "{project-root}/_bmad/bmm/workflows/1-analysis/create-product-brief/workflow.md"
+    outputs:
+      - artifact: "product-brief"
+        path: "{planning_artifacts}/product-brief.md"
+
+# =============================================================================
+# ROUTER CONFIGURATION (Principle #7)
+# =============================================================================
+routers:
+  research-type-router:
+    description: "Routes to appropriate research sub-workflow"
+    selection_source: "user_input"
+    routes:
+      - type: "market"
+        path: "./market-steps/step-01-init.md"
+        condition: "research_type == 'market'"
+      - type: "domain"
+        path: "./domain-steps/step-01-init.md"
+        condition: "research_type == 'domain'"
+      - type: "technical"
+        path: "./technical-steps/step-01-init.md"
+        condition: "research_type == 'technical'"
+        gate: "track == 'enterprise'" # Technical research gated by track
+
+# =============================================================================
+# CHECKLIST EVALUATION (Principle #8)
+# =============================================================================
+checklists:
+  brainstorm-completion:
+    description: "Hard gate for brainstorm completion"
+    required_items:
+      - id: "project_brief_exists"
+        check: "file_exists({planning_artifacts}/product-brief.md) OR section_exists(brainstorm_output, 'Project Brief')"
+        required: true
+      - id: "assumptions_documented"
+        check: "section_exists(brainstorm_output, 'Assumptions') AND item_count >= 1"
+        required: true
+      - id: "research_plan_defined"
+        check: "section_exists(brainstorm_output, 'Research Plan')"
+        required: true
+      - id: "open_questions_bounded"
+        check: "section_exists(brainstorm_output, 'Open Questions') AND item_count <= 10"
+        required: false
+        on_fail: "mark_for_review"
+
+  phase1-completion:
+    description: "Gate for Phase 1 completion"
+    required_items:
+      - id: "workflow_status_updated"
+        check: "status_file_exists AND artifacts_registered"
+        required: true
+      - id: "all_required_artifacts"
+        check: "foreach(required_workflow in selected_path) -> artifact_exists"
+        required: true
+
+# =============================================================================
+# AUTONOMOUS LOOP CONTROLS (Principle #9)
+# =============================================================================
+autonomy:
+  brainstorm_autopilot:
+    enabled: true
+    max_depth: 3
+    max_iterations: 10
+    stop_conditions:
+      - "all checklist items pass"
+      - "no new ideas generated in last 2 iterations"
+      - "user requests stop"
+      - "max_iterations reached"
+    on_incomplete:
+      action: "record"
+      fields:
+        - "blocked_reason"
+        - "low_confidence_items"
+        - "open_questions"
+
+  research_loop:
+    enabled: false # Research is interactive only
+    note: "Research requires web search and user direction"
+
+# =============================================================================
+# BRAINSTORM AUTOPILOT (Principle #13 & #14)
+# =============================================================================
+brainstorm_autopilot:
+  description: "Multi-agent brainstorm in autopilot mode"
+
+  agents:
+    analyst:
+      role: "Brainstorm / Analyst"
+      responsibility: "convergence and structure"
+      can_finalize: true
+      can_write_artifacts: true
+      can_modify_research_plan: true
+
+    explorer:
+      role: "Exploration / Party Mode"
+      responsibility: "divergence and creative alternatives"
+      can_finalize: false
+      can_write_artifacts: false
+      can_modify_research_plan: false
+
+  intermediate_artifacts:
+    - name: "explorations"
+      description: "Creative alternatives explored by explorer agent"
+      path: "{planning_artifacts}/analysis/.intermediate/explorations-{timestamp}.md"
+    - name: "alternatives"
+      description: "Alternative approaches considered"
+      path: "{planning_artifacts}/analysis/.intermediate/alternatives-{timestamp}.md"
+    - name: "rejected_options"
+      description: "Options explicitly rejected with rationale"
+      path: "{planning_artifacts}/analysis/.intermediate/rejected-{timestamp}.md"
+
+  completion_criteria:
+    description: "Artifact-driven completion (not conversational exhaustion)"
+    required_artifacts:
+      - name: "project_brief"
+        description: "Clear project vision and scope"
+      - name: "assumptions"
+        description: "Explicit assumptions list"
+      - name: "research_plan"
+        description: "Structured research plan"
+      - name: "open_questions"
+        description: "Bounded list of open questions (if any)"
+
+  workflow:
+    - step: 1
+      agent: "analyst"
+      action: "Initialize brainstorm session and set convergence goals"
+    - step: 2
+      agent: "explorer"
+      action: "Generate divergent ideas and alternatives"
+      output: "intermediate_artifacts/explorations"
+    - step: 3
+      agent: "analyst"
+      action: "Filter and commit relevant explorations"
+      input: "intermediate_artifacts/explorations"
+    - step: 4
+      agent: "analyst"
+      action: "Check completion criteria"
+      condition: "loop back to step 2 if criteria not met AND iterations < max"
+    - step: 5
+      agent: "analyst"
+      action: "Finalize artifacts and update workflow status"
+
+# =============================================================================
+# ARTIFACT REGISTRY (Principle #5)
+# =============================================================================
+artifact_registry:
+  description: "Canonical artifact tracking for Phase 1"
+
+  format:
+    artifact_id:
+      type: "string"
+      pattern: "^[a-z0-9-]+$"
+    file_path:
+      type: "string"
+      description: "Relative path from project root"
+    phase:
+      type: "number"
+      enum: [1]
+    confidence:
+      type: "string"
+      enum: ["high", "medium", "low"]
+    created_at:
+      type: "datetime"
+    findings:
+      type: "array"
+      optional: true
+
+  propagation_rules:
+    - "Artifact must exist on disk before registration"
+    - "Registration updates workflow-status file"
+    - "Unregistered artifacts are invisible to Phase 2"
+
+# =============================================================================
+# EXECUTION CONTRACT
+# =============================================================================
+execution_contract:
+  phase1_complete_when:
+    - "workflow steps executed or explicitly skipped"
+    - "artifacts generated and propagated"
+    - "status updated and readable by Phase 2"
+
+  phase2_can_load_when:
+    - "workflow-status file exists"
+    - "all required artifacts referenced in status"
+    - "no heuristics needed to locate artifacts"
+
+# =============================================================================
+# PATH COMPATIBILITY (Principle #10)
+# =============================================================================
+path_aliases:
+  - primary: "_bmad/"
+    alias: ".bmad/"
+  - primary: "{planning_artifacts}"
+    fallbacks:
+      - "{output_folder}/planning-artifacts"
+      - "docs/planning"
+      - "_bmad-output/planning-artifacts"
+
+# =============================================================================
+# EXECUTION MODES
+# =============================================================================
+execution_modes:
+  interactive:
+    description: "Full user interaction at each step"
+    default: true
+
+  autopilot:
+    description: "Autonomous execution with bounded loops"
+    scope: "brainstorm only"
+    requires: "autopilot=true parameter"
+
+  hybrid:
+    description: "Autopilot brainstorm, interactive research"
+    scope: "mixed based on step configuration"

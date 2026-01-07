@@ -1,0 +1,305 @@
+# Artifact Registry
+# Implements Principle #5: Artifact Propagation Is Mandatory
+# Every artifact produced in Phase 1 must be registered in the canonical workflow status.
+
+name: artifact-registry
+version: "1.0.0"
+description: |
+  Manages artifact registration and propagation for Phase 1.
+  Ensures all artifacts are tracked and accessible to later phases.
+  If an artifact is not propagated, it does not exist.
+
+# =============================================================================
+# ARTIFACT LIFECYCLE
+# =============================================================================
+lifecycle:
+  states:
+    - name: "pending"
+      description: "Workflow started but artifact not yet created"
+    - name: "draft"
+      description: "Artifact file exists but not finalized"
+    - name: "complete"
+      description: "Artifact finalized and registered"
+    - name: "skipped"
+      description: "Workflow skipped, no artifact produced"
+
+  transitions:
+    pending_to_draft:
+      trigger: "file_created"
+      action: "Record file path, set state to draft"
+
+    draft_to_complete:
+      trigger: "workflow_completed"
+      action: "Validate artifact, register in status, set state to complete"
+      validation:
+        - "File exists on disk"
+        - "File has minimum required content"
+        - "Checklist items pass (if applicable)"
+
+    pending_to_skipped:
+      trigger: "workflow_skipped"
+      action: "Record skip reason, set state to skipped"
+
+# =============================================================================
+# PHASE 1 ARTIFACT DEFINITIONS
+# =============================================================================
+phase1_artifacts:
+  - id: "brainstorm-session"
+    workflow: "brainstorm"
+    optional: true
+    default_path: "{planning_artifacts}/analysis/brainstorm-session-{date}.md"
+    validation:
+      required_sections:
+        - "Session Overview"
+        - "Ideas Generated"
+      min_word_count: 200
+
+  - id: "product-brief"
+    workflow: "product-brief"
+    optional: true
+    default_path: "{planning_artifacts}/product-brief.md"
+    validation:
+      required_sections:
+        - "Product Vision"
+        - "Target Users"
+        - "Key Features"
+      min_word_count: 500
+
+  - id: "research-market"
+    workflow: "research"
+    optional: true
+    condition: "research_type == 'market'"
+    default_path: "{planning_artifacts}/research/market-{topic}-research-{date}.md"
+    validation:
+      required_sections:
+        - "Executive Summary"
+        - "Market Analysis"
+        - "Sources"
+      min_word_count: 1000
+
+  - id: "research-domain"
+    workflow: "research"
+    optional: true
+    condition: "research_type == 'domain'"
+    default_path: "{planning_artifacts}/research/domain-{topic}-research-{date}.md"
+    validation:
+      required_sections:
+        - "Executive Summary"
+        - "Domain Analysis"
+        - "Sources"
+      min_word_count: 1000
+
+  - id: "research-technical"
+    workflow: "research"
+    optional: true
+    condition: "research_type == 'technical' AND track == 'enterprise'"
+    default_path: "{planning_artifacts}/research/technical-{topic}-research-{date}.md"
+    validation:
+      required_sections:
+        - "Executive Summary"
+        - "Technical Analysis"
+        - "Sources"
+      min_word_count: 1000
+
+  - id: "workflow-status"
+    workflow: "workflow-init"
+    optional: false
+    default_path: "{planning_artifacts}/bmm-workflow-status.yaml"
+    validation:
+      required_fields:
+        - "project"
+        - "selected_track"
+        - "workflow_status"
+
+# =============================================================================
+# INTERMEDIATE ARTIFACTS (Brainstorm Autopilot)
+# =============================================================================
+intermediate_artifacts:
+  description: "Temporary artifacts from autopilot exploration"
+
+  storage:
+    path: "{planning_artifacts}/analysis/.intermediate/"
+    retention: "until_phase1_complete"
+
+  types:
+    - id: "explorations"
+      description: "Creative alternatives explored by explorer agent"
+      pattern: "explorations-{timestamp}.md"
+      lifecycle: "filtered by analyst before commit"
+
+    - id: "alternatives"
+      description: "Alternative approaches considered"
+      pattern: "alternatives-{timestamp}.md"
+      lifecycle: "reviewed and selected by analyst"
+
+    - id: "rejected-options"
+      description: "Options explicitly rejected with rationale"
+      pattern: "rejected-{timestamp}.md"
+      lifecycle: "preserved for audit trail"
+
+  cleanup:
+    trigger: "phase1_complete"
+    action: "Archive to {planning_artifacts}/analysis/.archive/"
+
+# =============================================================================
+# REGISTRATION OPERATIONS
+# =============================================================================
+operations:
+  register:
+    description: "Register artifact in workflow status"
+    inputs:
+      artifact_id: "string"
+      file_path: "string"
+      phase: "number (default: 1)"
+      confidence: "high | medium | low"
+      findings: "array of strings (optional)"
+    steps:
+      - "Validate file exists at file_path"
+      - "Validate artifact against definition"
+      - "Update workflow_status with file_path"
+      - "Add to artifacts extended field"
+      - "Record phase_attribution"
+      - "Record confidence level"
+      - "Append any key findings"
+
+  unregister:
+    description: "Remove artifact registration (for corrections)"
+    inputs:
+      artifact_id: "string"
+    steps:
+      - "Remove from workflow_status"
+      - "Remove from artifacts extended field"
+      - "Note: Does not delete file"
+
+  validate:
+    description: "Validate registered artifact still valid"
+    inputs:
+      artifact_id: "string"
+    steps:
+      - "Check file exists"
+      - "Check file matches expected format"
+      - "Run validation rules"
+      - "Return validation result"
+
+  list:
+    description: "List all registered artifacts"
+    returns:
+      - artifact_id
+      - file_path
+      - state
+      - phase
+      - confidence
+
+# =============================================================================
+# PROPAGATION RULES
+# =============================================================================
+propagation:
+  description: "Rules for artifact visibility to later phases"
+
+  rule_1:
+    name: "Registration Required"
+    statement: "Artifact must be registered in workflow-status to exist"
+    enforcement: "Phase 2 reads only from workflow-status, not file system"
+
+  rule_2:
+    name: "Path Must Be Valid"
+    statement: "Registered path must point to existing file"
+    enforcement: "Registration validates file existence"
+
+  rule_3:
+    name: "Format Must Match"
+    statement: "Artifact content must match expected format"
+    enforcement: "Validation checks required sections/fields"
+
+  rule_4:
+    name: "Phase Attribution Required"
+    statement: "Every artifact must have phase number"
+    enforcement: "Default to current phase if not specified"
+
+  phase2_contract:
+    description: "What Phase 2 receives from artifact registry"
+    provides:
+      - "List of artifact_ids with file paths"
+      - "Confidence level for each artifact"
+      - "Key findings extracted from artifacts"
+      - "Open questions requiring resolution"
+    requires:
+      - "All required workflows completed or skipped"
+      - "All artifacts validated"
+      - "Workflow status file exists and valid"
+
+# =============================================================================
+# VALIDATION FRAMEWORK
+# =============================================================================
+validation:
+  file_checks:
+    - check: "exists"
+      description: "File exists at registered path"
+      severity: "error"
+
+    - check: "readable"
+      description: "File can be read"
+      severity: "error"
+
+    - check: "non_empty"
+      description: "File has content"
+      severity: "error"
+
+  content_checks:
+    - check: "has_frontmatter"
+      description: "Markdown files have YAML frontmatter"
+      severity: "warning"
+      applies_to: "*.md"
+
+    - check: "required_sections"
+      description: "Required sections present in document"
+      severity: "error"
+      per_artifact: true
+
+    - check: "min_word_count"
+      description: "Meets minimum content threshold"
+      severity: "warning"
+      per_artifact: true
+
+  confidence_assignment:
+    high:
+      criteria:
+        - "All validation checks pass"
+        - "All checklist items complete"
+        - "No open questions related to artifact"
+
+    medium:
+      criteria:
+        - "Required validation checks pass"
+        - "Some checklist items may be incomplete"
+        - "Has bounded open questions"
+
+    low:
+      criteria:
+        - "File exists but validation incomplete"
+        - "Significant open questions"
+        - "Marked for review"
+
+# =============================================================================
+# ERROR HANDLING
+# =============================================================================
+errors:
+  artifact_not_found:
+    code: "E001"
+    message: "Artifact file not found at registered path"
+    action: "Mark artifact as missing, update status"
+
+  validation_failed:
+    code: "E002"
+    message: "Artifact failed validation"
+    action: "Record failure, lower confidence, may block completion"
+
+  duplicate_registration:
+    code: "E003"
+    message: "Artifact already registered with different path"
+    action: "Reject unless --force flag provided"
+
+  unregistered_reference:
+    code: "E004"
+    message: "Phase 2 workflow references unregistered artifact"
+    action: "Error - artifact does not exist for downstream phases"
