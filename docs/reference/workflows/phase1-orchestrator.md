@@ -1,5 +1,5 @@
 ---
-title: "Phase 1 Orchestrator"
+title: 'Phase 1 Orchestrator'
 description: Orchestrated execution layer for BMAD v6 Phase 1 (Analysis)
 ---
 
@@ -17,6 +17,47 @@ The orchestrator sits on top of existing BMAD v6 workflows, providing:
 - **Deterministic behavior** - All execution derived from workflow assets
 - **Bounded autonomy** - Autonomous loops with explicit limits
 - **Artifact propagation** - Contract-based handoff to Phase 2
+
+:::note[Important: Contracts, Not Engine]
+The orchestrator files provide **configuration and rules** for execution, not a ready-made
+execution engine. You need an LLM orchestrator (or interactive agent) to read and execute
+these configurations. See [How to Run Orchestrated Phase 1](../../how-to/workflows/run-orchestrated-phase1.md).
+:::
+
+## Mandatory vs Optional Components
+
+:::note[Path Conventions]
+Paths in this document use the **installed project layout** (`_bmad/`).
+For repository source paths, replace `_bmad/` with `src/` (e.g., `src/core/orchestrator/...`).
+:::
+
+### Mandatory for Faithful Phase 1 Orchestration
+
+These components are **required** for proper orchestrated execution:
+
+| Component            | Installed Path                                           | Purpose                                 |
+| -------------------- | -------------------------------------------------------- | --------------------------------------- |
+| Workflow Init        | `_bmad/bmm/workflows/workflow-status/init/workflow.yaml` | Canonical gate and status file creation |
+| Phase 1 Workflows    | `_bmad/bmm/workflows/1-analysis/*`                       | Actual research/product-brief content   |
+| Phase 1 Orchestrator | `_bmad/core/orchestrator/phase1-orchestrator.yaml`       | Main orchestration manifest             |
+| Status Resolver      | `_bmad/core/orchestrator/status-resolver.yaml`           | Multi-format status file support        |
+| Artifact Registry    | `_bmad/core/orchestrator/artifact-registry.yaml`         | Artifact registration rules             |
+| Checklist Evaluator  | `_bmad/core/orchestrator/checklist-evaluator.yaml`       | Hard gate validation                    |
+| Router Dispatcher    | `_bmad/core/orchestrator/router-dispatcher.yaml`         | Sub-workflow routing                    |
+| Instructions         | `_bmad/core/orchestrator/instructions.md`                | LLM integration rules                   |
+
+### Optional Components (Autopilot Mode Only)
+
+These are only needed if you enable autonomous brainstorm execution:
+
+| Component            | Installed Path                                            | Purpose                           |
+| -------------------- | --------------------------------------------------------- | --------------------------------- |
+| Brainstorm Autopilot | `_bmad/core/orchestrator/brainstorm-autopilot.yaml`       | Multi-agent brainstorm automation |
+| Loop Controller      | `_bmad/core/orchestrator/autonomous-loop-controller.yaml` | Bounds and stop conditions        |
+
+### Not Required for Execution
+
+Documentation files in `docs/reference/workflows/*` are informational only and not runtime dependencies.
 
 ## Core Principles
 
@@ -175,6 +216,7 @@ Determines track, field type, and discovery selections.
 Creative exploration with optional autopilot mode.
 
 **Completion Criteria:**
+
 - Project brief exists
 - Assumptions documented
 - Research plan defined
@@ -196,10 +238,10 @@ The workflow status supports multiple formats and locations:
 
 ### Supported Formats
 
-| Format | Extension | Parser |
-|--------|-----------|--------|
-| YAML | `.yaml` | yaml |
-| Markdown | `.md` | frontmatter |
+| Format   | Extension | Parser      |
+| -------- | --------- | ----------- |
+| YAML     | `.yaml`   | yaml        |
+| Markdown | `.md`     | frontmatter |
 
 ### Search Locations
 
@@ -215,12 +257,21 @@ The workflow status supports multiple formats and locations:
 The orchestrator adds optional fields for enhanced tracking:
 
 ```yaml
+# Track and Discovery Selections (from workflow-init)
+selected_track: 'method' # or 'enterprise'
+field_type: 'greenfield' # or 'brownfield'
+discovery_selections:
+  brainstorm: true
+  research: true
+  product_brief: false
+
 # Artifact Registry
 artifacts:
   product-brief:
-    path: "docs/product-brief.md"
+    path: 'docs/product-brief.md'
     phase: 1
-    confidence: "high"
+    confidence: 'high'
+    status: 'complete' # or 'draft', 'blocked'
 
 # Phase Attribution
 phase_attribution:
@@ -228,16 +279,16 @@ phase_attribution:
 
 # Confidence Levels
 confidence:
-  product-brief: "high"
+  product-brief: 'high'
 
 # Key Findings
 key_findings:
-  - finding: "Target market is SMB"
-    source_artifact: "research-market"
+  - finding: 'Target market is SMB'
+    source_artifact: 'research-market'
 
 # Open Questions
 open_questions:
-  - question: "Pricing strategy?"
+  - question: 'Pricing strategy?'
     blocking: false
 ```
 
@@ -256,9 +307,9 @@ Unregistered artifacts are invisible to Phase 2.
 
 ### Path Aliases
 
-| Primary | Alias |
-|---------|-------|
-| `_bmad/` | `.bmad/` |
+| Primary                | Alias                                |
+| ---------------------- | ------------------------------------ |
+| `_bmad/`               | `.bmad/`                             |
 | `{planning_artifacts}` | `{output_folder}/planning-artifacts` |
 
 ### Backward Compatibility
@@ -277,8 +328,45 @@ The orchestrator can be removed without breaking:
 
 **Test:** If removing the orchestrator breaks BMAD semantics, the design is wrong.
 
+## Execution Quick Reference
+
+### As a BMAD User (Interactive Mode)
+
+```bash
+# 1. Install BMAD v6
+npx bmad-method@alpha install
+
+# 2. In IDE/agent chat, run workflow-init
+*workflow-init
+
+# 3. Execute selected Phase 1 workflows interactively
+*brainstorm   # if selected
+*research     # if selected
+*product-brief # if selected
+```
+
+### As an LLM Orchestrator
+
+```yaml
+# Pseudo-algorithm for orchestrated execution
+1. Verify _bmad/... installation exists
+2. Execute workflow-init (workflow, not heuristic)
+3. Read bmm-workflow-status.* via status-resolver.yaml rules
+4. Load phase1-orchestrator.yaml
+5. For each step allowed by status/track:
+   - Execute workflow at declared path
+   - If autopilot=true for brainstorm:
+     - Load brainstorm-autopilot.yaml
+     - Load autonomous-loop-controller.yaml
+6. After each artifact:
+   - Validate via artifact-registry.yaml + checklist-evaluator.yaml
+   - Register in status (artifact propagation)
+7. Complete Phase 1: status readable by Phase 2 without heuristics
+```
+
 ## Related Documentation
 
+- [How to Run Orchestrated Phase 1](../../how-to/workflows/run-orchestrated-phase1.md)
 - [Core Workflows](./core-workflows.md)
-- [Workflow Status](../configuration/index.md)
+- [Global Configuration](../configuration/global-config.md)
 - [Agents Reference](../agents/index.md)

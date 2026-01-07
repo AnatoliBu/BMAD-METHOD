@@ -1,7 +1,6 @@
 ---
-title: "How-To Guides"
+title: 'How-To Guides'
 ---
-
 
 Task-oriented guides that show you how to accomplish specific goals. Each guide assumes you already understand the basics.
 
@@ -12,7 +11,7 @@ Task-oriented guides that show you how to accomplish specific goals. Each guide 
 
 ## IDE Setup
 
-*Coming soon*
+_Coming soon_
 
 ## Customization
 
@@ -24,6 +23,8 @@ Task-oriented guides that show you how to accomplish specific goals. Each guide 
 ## Workflows
 
 Guides for running specific BMAD workflows.
+
+- [Run Orchestrated Phase 1](./workflows/run-orchestrated-phase1.md) - Execute Phase 1 with the orchestration layer
 
 ## Brownfield Projects
 
