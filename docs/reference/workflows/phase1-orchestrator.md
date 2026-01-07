@@ -26,29 +26,34 @@ these configurations. See [How to Run Orchestrated Phase 1](../../how-to/workflo
 
 ## Mandatory vs Optional Components
 
+:::note[Path Conventions]
+Paths in this document use the **installed project layout** (`_bmad/`).
+For repository source paths, replace `_bmad/` with `src/` (e.g., `src/core/orchestrator/...`).
+:::
+
 ### Mandatory for Faithful Phase 1 Orchestration
 
 These components are **required** for proper orchestrated execution:
 
-| Component            | File                                           | Purpose                                 |
-| -------------------- | ---------------------------------------------- | --------------------------------------- |
-| Workflow Init        | `workflows/workflow-status/init/workflow.yaml` | Canonical gate and status file creation |
-| Phase 1 Workflows    | `workflows/1-analysis/*`                       | Actual research/product-brief content   |
-| Phase 1 Orchestrator | `orchestrator/phase1-orchestrator.yaml`        | Main orchestration manifest             |
-| Status Resolver      | `orchestrator/status-resolver.yaml`            | Multi-format status file support        |
-| Artifact Registry    | `orchestrator/artifact-registry.yaml`          | Artifact registration rules             |
-| Checklist Evaluator  | `orchestrator/checklist-evaluator.yaml`        | Hard gate validation                    |
-| Router Dispatcher    | `orchestrator/router-dispatcher.yaml`          | Sub-workflow routing                    |
-| Instructions         | `orchestrator/instructions.md`                 | LLM integration rules                   |
+| Component            | Installed Path                                           | Purpose                                 |
+| -------------------- | -------------------------------------------------------- | --------------------------------------- |
+| Workflow Init        | `_bmad/bmm/workflows/workflow-status/init/workflow.yaml` | Canonical gate and status file creation |
+| Phase 1 Workflows    | `_bmad/bmm/workflows/1-analysis/*`                       | Actual research/product-brief content   |
+| Phase 1 Orchestrator | `_bmad/core/orchestrator/phase1-orchestrator.yaml`       | Main orchestration manifest             |
+| Status Resolver      | `_bmad/core/orchestrator/status-resolver.yaml`           | Multi-format status file support        |
+| Artifact Registry    | `_bmad/core/orchestrator/artifact-registry.yaml`         | Artifact registration rules             |
+| Checklist Evaluator  | `_bmad/core/orchestrator/checklist-evaluator.yaml`       | Hard gate validation                    |
+| Router Dispatcher    | `_bmad/core/orchestrator/router-dispatcher.yaml`         | Sub-workflow routing                    |
+| Instructions         | `_bmad/core/orchestrator/instructions.md`                | LLM integration rules                   |
 
 ### Optional Components (Autopilot Mode Only)
 
 These are only needed if you enable autonomous brainstorm execution:
 
-| Component            | File                                           | Purpose                           |
-| -------------------- | ---------------------------------------------- | --------------------------------- |
-| Brainstorm Autopilot | `orchestrator/brainstorm-autopilot.yaml`       | Multi-agent brainstorm automation |
-| Loop Controller      | `orchestrator/autonomous-loop-controller.yaml` | Bounds and stop conditions        |
+| Component            | Installed Path                                            | Purpose                           |
+| -------------------- | --------------------------------------------------------- | --------------------------------- |
+| Brainstorm Autopilot | `_bmad/core/orchestrator/brainstorm-autopilot.yaml`       | Multi-agent brainstorm automation |
+| Loop Controller      | `_bmad/core/orchestrator/autonomous-loop-controller.yaml` | Bounds and stop conditions        |
 
 ### Not Required for Execution
 
@@ -252,12 +257,21 @@ The workflow status supports multiple formats and locations:
 The orchestrator adds optional fields for enhanced tracking:
 
 ```yaml
+# Track and Discovery Selections (from workflow-init)
+selected_track: 'method' # or 'enterprise'
+field_type: 'greenfield' # or 'brownfield'
+discovery_selections:
+  brainstorm: true
+  research: true
+  product_brief: false
+
 # Artifact Registry
 artifacts:
   product-brief:
     path: 'docs/product-brief.md'
     phase: 1
     confidence: 'high'
+    status: 'complete' # or 'draft', 'blocked'
 
 # Phase Attribution
 phase_attribution:

@@ -31,18 +31,65 @@ This guide explains how to execute Phase 1 (Analysis) of the BMAD Method using t
 
    This creates/updates the workflow-status file (typically at `{planning_artifacts}/bmm-workflow-status.yaml`).
 
-3. **Execute Phase 1 workflows** interactively using selected workflows:
-   - Brainstorm: `*brainstorm`
-   - Research: `*research`
-   - Product Brief: `*product-brief`
+3. **Execute Phase 1 workflows** interactively using the workflow IDs from your installation:
+   - Use `/workflows` or check your `_bmad/bmm/workflows/1-analysis/` directory
+   - Workflow commands depend on your installed configuration
+   - Example: `*workflow-init` is always available after installation
+
+:::note[Workflow Commands]
+Commands like `*brainstorm`, `*research`, `*product-brief` depend on the installed workflow set.
+Always verify available workflows via `/workflows` or the workflow index in your IDE.
+:::
 
 ## Mandatory vs Optional Components
 
+### Path Conventions
+
+Paths are shown in two formats throughout this documentation:
+
+| Context               | Base Path              | Example                                            |
+| --------------------- | ---------------------- | -------------------------------------------------- |
+| **Repository**        | `src/`                 | `src/core/orchestrator/phase1-orchestrator.yaml`   |
+| **Installed Project** | `_bmad/` (or `.bmad/`) | `_bmad/core/orchestrator/phase1-orchestrator.yaml` |
+
+The installer copies files from `src/` to `_bmad/` in your target project.
+
+### Path Variables
+
+These variables are resolved from your project's configuration (`_bmad/bmm/config.yaml`):
+
+| Variable               | Default Value                        | Description                    |
+| ---------------------- | ------------------------------------ | ------------------------------ |
+| `{project-root}`       | Current working directory            | Root of your project           |
+| `{output_folder}`      | `_bmad-output`                       | Base output directory          |
+| `{planning_artifacts}` | `{output_folder}/planning-artifacts` | Where planning docs are stored |
+
+**Supported aliases for `{planning_artifacts}`:**
+
+- `{output_folder}/planning-artifacts` (default)
+- `docs/planning`
+- `_bmad-output/planning-artifacts`
+
 ### Mandatory for Phase 1 Orchestration
 
-These components are **required** for faithful Phase 1 execution:
+These components are **required** for faithful Phase 1 execution.
 
-| Component                | Location                                                 | Purpose                                  |
+**In Repository (`src/`):**
+
+| Component                | Repo Path                                                      | Purpose                                  |
+| ------------------------ | -------------------------------------------------------------- | ---------------------------------------- |
+| workflow-init            | `src/modules/bmm/workflows/workflow-status/init/workflow.yaml` | Track selection and status file creation |
+| Phase 1 workflows        | `src/modules/bmm/workflows/1-analysis/*`                       | Research, product-brief content          |
+| phase1-orchestrator.yaml | `src/core/orchestrator/phase1-orchestrator.yaml`               | Main orchestration manifest              |
+| status-resolver.yaml     | `src/core/orchestrator/status-resolver.yaml`                   | Multi-format status file support         |
+| artifact-registry.yaml   | `src/core/orchestrator/artifact-registry.yaml`                 | Artifact registration rules              |
+| checklist-evaluator.yaml | `src/core/orchestrator/checklist-evaluator.yaml`               | Hard gate validation                     |
+| router-dispatcher.yaml   | `src/core/orchestrator/router-dispatcher.yaml`                 | Sub-workflow routing                     |
+| instructions.md          | `src/core/orchestrator/instructions.md`                        | Integration rules for LLM                |
+
+**In Installed Project (`_bmad/`):**
+
+| Component                | Installed Path                                           | Purpose                                  |
 | ------------------------ | -------------------------------------------------------- | ---------------------------------------- |
 | workflow-init            | `_bmad/bmm/workflows/workflow-status/init/workflow.yaml` | Track selection and status file creation |
 | Phase 1 workflows        | `_bmad/bmm/workflows/1-analysis/*`                       | Research, product-brief content          |
@@ -57,10 +104,10 @@ These components are **required** for faithful Phase 1 execution:
 
 These are only needed if you enable autonomous brainstorm execution:
 
-| Component                       | Location                                                  | Purpose                           |
-| ------------------------------- | --------------------------------------------------------- | --------------------------------- |
-| brainstorm-autopilot.yaml       | `_bmad/core/orchestrator/brainstorm-autopilot.yaml`       | Multi-agent brainstorm automation |
-| autonomous-loop-controller.yaml | `_bmad/core/orchestrator/autonomous-loop-controller.yaml` | Loop bounds and stop conditions   |
+| Component                       | Repo Path                                               | Installed Path                                            | Purpose                           |
+| ------------------------------- | ------------------------------------------------------- | --------------------------------------------------------- | --------------------------------- |
+| brainstorm-autopilot.yaml       | `src/core/orchestrator/brainstorm-autopilot.yaml`       | `_bmad/core/orchestrator/brainstorm-autopilot.yaml`       | Multi-agent brainstorm automation |
+| autonomous-loop-controller.yaml | `src/core/orchestrator/autonomous-loop-controller.yaml` | `_bmad/core/orchestrator/autonomous-loop-controller.yaml` | Loop bounds and stop conditions   |
 
 ### Not Required for Execution
 
@@ -225,7 +272,7 @@ The orchestrator supports multiple status file locations for flexibility:
 
 ## Track Gating
 
-Certain workflows are gated by track selection:
+Certain workflows are gated by track selection. **Gating is enforced by the router-dispatcher**, not by user commands. If you attempt to invoke a gated workflow directly, the dispatcher will block it with error `R003`.
 
 | Workflow           | Method Track | Enterprise Track |
 | ------------------ | ------------ | ---------------- |
@@ -248,6 +295,37 @@ Every artifact produced must follow these rules:
 5. **Have confidence level** (high/medium/low)
 
 **Critical:** Unregistered artifacts are **invisible** to Phase 2.
+
+## Minimal Orchestrator Contract
+
+For any LLM orchestrator implementation, the following contract must be satisfied:
+
+### Input Requirements
+
+| Parameter         | Type    | Required | Description                              |
+| ----------------- | ------- | -------- | ---------------------------------------- |
+| `project_root`    | string  | Yes      | Absolute path to project root            |
+| `autopilot`       | boolean | No       | Enable brainstorm autopilot mode         |
+| `status_format`   | string  | No       | Preferred status format (`yaml` or `md`) |
+| `status_location` | string  | No       | Override status file location            |
+
+### Output Guarantees
+
+| Output                    | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `bmm-workflow-status.*`   | Updated status file at configured location       |
+| Artifact files            | Created at paths defined in workflow definitions |
+| `artifacts` map in status | List of all registered artifacts with metadata   |
+
+### Hard Guarantees
+
+The orchestrator **must** ensure:
+
+1. **Artifact existence** - File exists on disk before registration in status
+2. **Checklist execution** - If workflow declares a checklist, it is evaluated
+3. **Status updates** - Status file updated after each workflow step completion
+4. **Track gating** - Router-dispatcher enforces track-based access control
+5. **Bounded loops** - Autopilot respects `max_iterations` and `stop_conditions`
 
 ## Troubleshooting
 
