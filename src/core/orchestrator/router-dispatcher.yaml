@@ -109,7 +109,7 @@ phase1_routers:
         path: "./technical-steps/step-01-init.md"
         condition: "research_type == 'technical'"
         gate: "track == 'enterprise'"
-        gate_message: "Technical research is available only in Enterprise track"
+        gate_message: "Technical research is available only in enterprise track"
         agent: "analyst"
 
   discovery-router:
