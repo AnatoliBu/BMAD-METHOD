@@ -1,0 +1,350 @@
+# Autonomous Loop Controller
+# Implements Principle #9: Autonomy Is Bounded and Explicit
+# Autonomous loops must have max depth, max iterations, explicit stop conditions.
+
+name: autonomous-loop-controller
+version: "1.0.0"
+description: |
+  Controls autonomous execution loops with explicit bounds.
+  Ensures loops have max depth, max iterations, and explicit stop conditions.
+  Records incompleteness when loops terminate without full completion.
+
+# =============================================================================
+# AUTONOMY PRINCIPLES
+# =============================================================================
+principles:
+  - "All autonomous loops MUST have max_depth"
+  - "All autonomous loops MUST have max_iterations"
+  - "All autonomous loops MUST have explicit stop conditions"
+  - "Incompleteness is acceptable ONLY if recorded"
+  - "No infinite or unbounded loops allowed"
+
+# =============================================================================
+# LOOP CONFIGURATION
+# =============================================================================
+loop_config:
+  required_fields:
+    - name: "max_depth"
+      type: "number"
+      description: "Maximum nesting depth for recursive operations"
+      default: 3
+      max: 10
+
+    - name: "max_iterations"
+      type: "number"
+      description: "Maximum number of loop iterations"
+      default: 10
+      max: 100
+
+    - name: "stop_conditions"
+      type: "array"
+      description: "List of conditions that terminate the loop"
+      min_items: 1
+
+    - name: "timeout_seconds"
+      type: "number"
+      description: "Maximum time for loop execution"
+      default: 600
+      max: 3600
+
+# =============================================================================
+# PHASE 1 AUTONOMOUS LOOPS
+# =============================================================================
+phase1_loops:
+  brainstorm_autopilot:
+    id: "brainstorm-autopilot"
+    description: "Autonomous brainstorm iteration loop"
+    enabled: true
+
+    bounds:
+      max_depth: 3
+      max_iterations: 10
+      timeout_seconds: 1800
+
+    stop_conditions:
+      - id: "completion_criteria_met"
+        condition: "all_required_artifacts_exist AND all_validations_pass"
+        priority: 1
+        action: "complete_success"
+
+      - id: "convergence_detected"
+        condition: "new_ideas_count_prev_1 < 3 and new_ideas_count_prev_2 < 3"
+        priority: 2
+        action: "complete_with_convergence"
+
+      - id: "user_stop"
+        condition: "user_requested_stop == true"
+        priority: 3
+        action: "complete_user_requested"
+
+      - id: "max_iterations"
+        condition: "iteration_count >= max_iterations"
+        priority: 4
+        action: "complete_limit_reached"
+
+      - id: "timeout"
+        condition: "elapsed_time >= timeout_seconds"
+        priority: 5
+        action: "complete_timeout"
+
+    on_incomplete:
+      record_fields:
+        - "blocked_reason"
+        - "low_confidence_items"
+        - "open_questions"
+        - "completion_percentage"
+      confidence_level: "low"
+      allow_phase_completion: true
+
+  research_iteration:
+    id: "research-iteration"
+    description: "Research source gathering iteration"
+    enabled: false
+    note: "Research is interactive-only in Phase 1"
+
+    bounds:
+      max_depth: 2
+      max_iterations: 5
+      timeout_seconds: 900
+
+    stop_conditions:
+      - id: "sources_sufficient"
+        condition: "source_count >= minimum_sources"
+        priority: 1
+
+      - id: "user_satisfied"
+        condition: "user_confirmed_sufficient == true"
+        priority: 2
+
+      - id: "max_iterations"
+        condition: "iteration_count >= max_iterations"
+        priority: 3
+
+# =============================================================================
+# LOOP EXECUTION
+# =============================================================================
+execution:
+  initialization:
+    steps:
+      - "Validate loop configuration has all required fields"
+      - "Initialize iteration counter to 0"
+      - "Initialize depth counter to 0"
+      - "Record start timestamp"
+      - "Set loop state to 'running'"
+
+  iteration:
+    steps:
+      - "Check all stop conditions (in priority order)"
+      - "If any condition met, execute corresponding action"
+      - "If no condition met, execute loop body"
+      - "Increment iteration counter"
+      - "Check depth if nested operation"
+      - "Record iteration metrics"
+
+  termination:
+    steps:
+      - "Record final state"
+      - "Calculate completion percentage"
+      - "Record any incompleteness details"
+      - "Update confidence level"
+      - "Return loop result"
+
+# =============================================================================
+# STATE TRACKING
+# =============================================================================
+state_tracking:
+  loop_state:
+    fields:
+      - name: "loop_id"
+        type: "string"
+      - name: "status"
+        type: "enum"
+        values: ["running", "completed", "stopped", "failed"]
+      - name: "iteration_count"
+        type: "number"
+      - name: "current_depth"
+        type: "number"
+      - name: "start_time"
+        type: "datetime"
+      - name: "end_time"
+        type: "datetime"
+      - name: "stop_reason"
+        type: "string"
+      - name: "completion_percentage"
+        type: "number"
+
+  iteration_metrics:
+    tracked_per_iteration:
+      - "iteration_number"
+      - "duration_seconds"
+      - "actions_performed"
+      - "artifacts_modified"
+      - "new_items_generated"
+
+# =============================================================================
+# INCOMPLETENESS RECORDING
+# =============================================================================
+incompleteness:
+  description: "Recording requirements when loop terminates incomplete"
+
+  required_records:
+    blocked_reason:
+      description: "Why the loop could not complete fully"
+      examples:
+        - "Max iterations reached (10/10)"
+        - "Timeout after 1800 seconds"
+        - "User requested stop at iteration 5"
+        - "Convergence detected - no new ideas in last 2 iterations"
+
+    low_confidence_items:
+      description: "Items that exist but may need refinement"
+      format: "list of {item_id, reason}"
+      examples:
+        - "research_plan: Only 1 item identified"
+        - "assumptions: Less than 3 assumptions documented"
+
+    open_questions:
+      description: "Questions that could not be resolved"
+      format: "list of {question, context, blocking}"
+      examples:
+        - "What is the target market size? (blocking: false)"
+        - "Which framework should be used? (blocking: true)"
+
+    completion_percentage:
+      description: "Estimate of how complete the work is"
+      calculation: "(criteria_met / total_criteria) * 100"
+
+  recording_format:
+    yaml: |
+      loop_completion:
+        loop_id: "{loop_id}"
+        status: "incomplete"
+        iterations_used: {count}
+        stop_reason: "{reason}"
+        completion_percentage: {percent}
+        blocked_reason: "{reason}"
+        low_confidence_items:
+          - item: "{item_id}"
+            reason: "{reason}"
+        open_questions:
+          - question: "{question}"
+            context: "{context}"
+            blocking: {true|false}
+
+# =============================================================================
+# STOP CONDITION EVALUATION
+# =============================================================================
+stop_conditions:
+  evaluation_order: "by priority (1 = highest)"
+
+  condition_types:
+    completion:
+      description: "Success condition - work is complete"
+      examples:
+        - "all_required_artifacts_exist"
+        - "all_validations_pass"
+        - "checklist_complete"
+
+    convergence:
+      description: "No further progress being made"
+      examples:
+        - "new_ideas_count < threshold"
+        - "no_new_themes_in_n_iterations"
+        - "output_similarity > threshold"
+
+    user:
+      description: "User-initiated stop"
+      examples:
+        - "user_requested_stop"
+        - "user_satisfied"
+
+    limit:
+      description: "Resource limit reached"
+      examples:
+        - "iteration_count >= max_iterations"
+        - "depth >= max_depth"
+        - "elapsed_time >= timeout"
+
+    error:
+      description: "Error condition"
+      examples:
+        - "critical_error_occurred"
+        - "dependency_unavailable"
+
+  actions:
+    complete_success:
+      description: "Loop completed successfully"
+      confidence: "high"
+      record_incomplete: false
+
+    complete_with_convergence:
+      description: "Loop converged before full completion"
+      confidence: "medium"
+      record_incomplete: true
+      note: "Convergence is acceptable outcome"
+
+    complete_user_requested:
+      description: "User stopped the loop"
+      confidence: "medium"
+      record_incomplete: true
+
+    complete_limit_reached:
+      description: "Hit iteration/depth/time limit"
+      confidence: "low"
+      record_incomplete: true
+
+    complete_timeout:
+      description: "Loop timed out"
+      confidence: "low"
+      record_incomplete: true
+
+    fail_error:
+      description: "Loop failed due to error"
+      confidence: "none"
+      record_incomplete: true
+
+# =============================================================================
+# DEPTH CONTROL
+# =============================================================================
+depth_control:
+  description: "Prevent unbounded recursive operations"
+
+  tracking:
+    - "Increment depth on nested operation start"
+    - "Decrement depth on nested operation end"
+    - "Check depth < max_depth before nesting"
+
+  enforcement:
+    - "Reject nested operation if depth >= max_depth"
+    - "Log warning at depth >= max_depth - 1"
+    - "Include depth in iteration metrics"
+
+# =============================================================================
+# MONITORING
+# =============================================================================
+monitoring:
+  real_time:
+    - "Current iteration count"
+    - "Current depth"
+    - "Elapsed time"
+    - "Last stop condition evaluated"
+    - "Artifacts modified this iteration"
+
+  logging:
+    level: "info"
+    events:
+      - "Loop started"
+      - "Iteration completed"
+      - "Stop condition evaluated"
+      - "Stop condition triggered"
+      - "Loop terminated"
+
+  alerts:
+    - condition: "iteration_count >= max_iterations * 0.8"
+      message: "Loop approaching iteration limit"
+
+    - condition: "elapsed_time >= timeout_seconds * 0.8"
+      message: "Loop approaching timeout"
+
+    - condition: "depth >= max_depth - 1"
+      message: "Loop at near-max depth"

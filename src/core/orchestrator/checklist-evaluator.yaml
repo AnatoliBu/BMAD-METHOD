@@ -1,0 +1,349 @@
+# Checklist Evaluator
+# Implements Principle #8: Checklists Are Hard Gates
+# If a workflow step declares a checklist, it must exist and must be evaluated.
+
+name: checklist-evaluator
+version: "1.0.0"
+description: |
+  Evaluates checklists as hard gates for workflow completion.
+  Failure to meet required checklist items blocks completion or marks for review.
+  "Looks good" is never sufficient - objective criteria must be met.
+
+# =============================================================================
+# CHECKLIST TYPES
+# =============================================================================
+checklist_types:
+  - type: "workflow-completion"
+    description: "Checklist that must pass before workflow is marked complete"
+    failure_action: "block"
+
+  - type: "phase-gate"
+    description: "Checklist that must pass before moving to next phase"
+    failure_action: "block"
+
+  - type: "artifact-validation"
+    description: "Checklist for artifact quality"
+    failure_action: "mark_for_review"
+
+  - type: "optional-quality"
+    description: "Recommended checks that don't block"
+    failure_action: "warn"
+
+# =============================================================================
+# EVALUATION RULES
+# =============================================================================
+evaluation:
+  principles:
+    - "Every declared checklist MUST be evaluated"
+    - "Missing checklist file is an error, not a skip"
+    - "Each item must have objective, verifiable criteria"
+    - "Subjective assessments like 'looks good' are prohibited"
+    - "Failed required items MUST block progression"
+
+  item_states:
+    - state: "pass"
+      symbol: "[x]"
+      description: "Criteria objectively met"
+
+    - state: "fail"
+      symbol: "[ ]"
+      description: "Criteria not met"
+
+    - state: "skip"
+      symbol: "[-]"
+      description: "Not applicable (must have documented reason)"
+
+    - state: "blocked"
+      symbol: "[!]"
+      description: "Cannot evaluate (dependency missing)"
+
+  evaluation_algorithm: |
+    1. Load checklist file from workflow declaration
+    2. If file missing, return error (not skip)
+    3. For each item in checklist:
+       a. Parse criteria expression
+       b. Evaluate against current state
+       c. Record result (pass/fail/skip/blocked)
+       d. If skip/blocked, require documented reason
+    4. Calculate overall result:
+       - If any required item fails: BLOCKED
+       - If all required pass: PASS
+       - Include summary of optional items
+
+# =============================================================================
+# PHASE 1 CHECKLISTS
+# =============================================================================
+phase1_checklists:
+  brainstorm-completion:
+    type: "workflow-completion"
+    description: "Validates brainstorm session produced required artifacts"
+    items:
+      - id: "project_brief_exists"
+        criteria: "Project brief section exists with content"
+        check: |
+          section_exists(output, "Project Brief") AND
+          word_count(section) >= 50
+        required: true
+
+      - id: "assumptions_documented"
+        criteria: "At least one assumption explicitly stated"
+        check: |
+          section_exists(output, "Assumptions") AND
+          list_item_count(section) >= 1
+        required: true
+
+      - id: "research_plan_defined"
+        criteria: "Research plan section exists"
+        check: |
+          section_exists(output, "Research Plan") OR
+          section_exists(output, "Next Steps")
+        required: true
+
+      - id: "open_questions_bounded"
+        criteria: "Open questions section is absent or, if present, the list has 10 or fewer items"
+        check: |
+          NOT section_exists(output, "Open Questions") OR
+          list_item_count(section) <= 10
+        required: false
+        on_fail: "Review open questions for closure"
+
+      - id: "ideas_generated"
+        criteria: "At least 10 ideas captured during session"
+        check: |
+          section_exists(output, "Ideas") AND
+          list_item_count(section) >= 10
+        required: false
+        on_fail: "Consider extending brainstorm session"
+
+  research-completion:
+    type: "workflow-completion"
+    description: "Validates research document meets quality standards"
+    items:
+      - id: "executive_summary_exists"
+        criteria: "Executive summary provides overview"
+        check: |
+          section_exists(output, "Executive Summary") AND
+          word_count(section) >= 100
+        required: true
+
+      - id: "sources_cited"
+        criteria: "At least 3 sources cited with URLs"
+        check: |
+          section_exists(output, "Sources") AND
+          url_count(section) >= 3
+        required: true
+
+      - id: "findings_documented"
+        criteria: "Key findings section exists"
+        check: |
+          section_exists(output, "Key Findings") OR
+          section_exists(output, "Findings") OR
+          section_exists(output, "Analysis")
+        required: true
+
+      - id: "confidence_indicated"
+        criteria: "Confidence levels indicated for claims"
+        check: |
+          contains_text(output, "High Confidence") OR
+          contains_text(output, "Medium Confidence") OR
+          contains_text(output, "Low Confidence")
+        required: false
+        on_fail: "Add confidence indicators to key claims"
+
+  product-brief-completion:
+    type: "workflow-completion"
+    description: "Validates product brief completeness"
+    items:
+      - id: "vision_defined"
+        criteria: "Product vision clearly stated"
+        check: |
+          section_exists(output, "Vision") OR
+          section_exists(output, "Product Vision")
+        required: true
+
+      - id: "users_identified"
+        criteria: "Target users described"
+        check: |
+          section_exists(output, "Target Users") OR
+          section_exists(output, "User Personas") OR
+          section_exists(output, "Users")
+        required: true
+
+      - id: "features_listed"
+        criteria: "Key features enumerated"
+        check: |
+          section_exists(output, "Features") OR
+          section_exists(output, "Key Features") OR
+          section_exists(output, "Capabilities")
+        required: true
+
+      - id: "success_metrics"
+        criteria: "Success metrics defined"
+        check: |
+          section_exists(output, "Success Metrics") OR
+          section_exists(output, "KPIs") OR
+          section_exists(output, "Goals")
+        required: false
+        on_fail: "Consider adding measurable success criteria"
+
+  phase1-gate:
+    type: "phase-gate"
+    description: "Gate check before proceeding to Phase 2"
+    items:
+      - id: "workflow_status_exists"
+        criteria: "Workflow status file exists and is valid"
+        check: |
+          file_exists("{planning_artifacts}/bmm-workflow-status.yaml")
+        required: true
+
+      - id: "all_required_complete"
+        criteria: "All required workflows completed or skipped"
+        check: |
+          foreach(workflow_status in status) ->
+            workflow_status == "skipped" OR file_exists(workflow_status)
+        required: true
+
+      - id: "artifacts_registered"
+        criteria: "All produced artifacts registered"
+        check: |
+          foreach(artifact in produced_artifacts) ->
+            artifact_registered(artifact.id)
+        required: true
+
+      - id: "no_blocking_questions"
+        criteria: "No blocking open questions"
+        check: |
+          NOT exists(open_questions where blocking == true)
+        required: true
+
+# =============================================================================
+# CHECK EXPRESSIONS
+# =============================================================================
+check_expressions:
+  description: "Expression language for checklist criteria"
+
+  functions:
+    - name: "section_exists"
+      params: ["document", "section_name"]
+      returns: "boolean"
+      description: "Check if named section exists in document"
+
+    - name: "word_count"
+      params: ["section"]
+      returns: "number"
+      description: "Count words in section"
+
+    - name: "list_item_count"
+      params: ["section"]
+      returns: "number"
+      description: "Count list items in section"
+
+    - name: "url_count"
+      params: ["section"]
+      returns: "number"
+      description: "Count URLs in section"
+
+    - name: "file_exists"
+      params: ["path"]
+      returns: "boolean"
+      description: "Check if file exists at path"
+
+    - name: "contains_text"
+      params: ["document", "text"]
+      returns: "boolean"
+      description: "Check if document contains text"
+
+    - name: "artifact_registered"
+      params: ["artifact_id"]
+      returns: "boolean"
+      description: "Check if artifact is registered in status"
+
+  operators:
+    - "AND" # Logical AND
+    - "OR" # Logical OR
+    - "NOT" # Logical NOT
+    - "==" # Equality
+    - ">=" # Greater than or equal
+    - "<=" # Less than or equal
+    - "is" # Type check (e.g., "is file_path")
+
+  special:
+    - name: "foreach"
+      syntax: "foreach(item in collection) -> expression"
+      description: "Evaluate expression for each item, all must pass"
+
+# =============================================================================
+# FAILURE HANDLING
+# =============================================================================
+failure_handling:
+  block:
+    description: "Prevents workflow completion"
+    behavior: |
+      1. Report all failed items
+      2. Prevent status update to "complete"
+      3. Keep workflow in "in_progress" state
+      4. Provide specific remediation steps
+
+  mark_for_review:
+    description: "Allows completion but flags for review"
+    behavior: |
+      1. Report failed items as warnings
+      2. Set artifact confidence to "low"
+      3. Add to review_required list
+      4. Allow workflow to complete
+
+  warn:
+    description: "Informational only"
+    behavior: |
+      1. Report failed items as suggestions
+      2. No impact on workflow state
+      3. Record in session log
+
+# =============================================================================
+# REPORTING
+# =============================================================================
+reporting:
+  format: |
+    ## Checklist Evaluation: {checklist_name}
+
+    **Status:** {PASS|BLOCKED|REVIEW_REQUIRED}
+
+    ### Required Items
+    {foreach required item}
+    - [{x| |!}] {item.criteria}
+      {if failed: "❌ " + item.on_fail}
+    {/foreach}
+
+    ### Optional Items
+    {foreach optional item}
+    - [{x| }] {item.criteria}
+      {if failed: "💡 " + item.on_fail}
+    {/foreach}
+
+    ### Summary
+    - Required: {passed_required}/{total_required}
+    - Optional: {passed_optional}/{total_optional}
+    - Blocked: {blocked_count}
+
+    {if BLOCKED}
+    ⛔ **Cannot proceed until required items pass**
+    {/if}
+
+# =============================================================================
+# INTEGRATION
+# =============================================================================
+integration:
+  workflow_execution:
+    description: "Called by workflow executor at completion"
+    trigger: "before marking workflow complete"
+    required: true
+
+  artifact_registration:
+    description: "Called before registering artifact"
+    trigger: "artifact_registry.register()"
+    optional: true
+
+  phase_gate:
+    description: "Called before phase transition"
+    trigger: "orchestrator.advance_phase()"
+    required: true

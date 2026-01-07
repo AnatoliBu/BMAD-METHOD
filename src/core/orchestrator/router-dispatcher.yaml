@@ -1,0 +1,313 @@
+# Router Dispatcher
+# Implements Principle #7: Research Is Routed, Not Hardcoded
+# Sub-agent selection happens via router assets, not inline logic.
+
+name: router-dispatcher
+version: "1.0.0"
+description: |
+  Dispatches workflow execution to appropriate sub-workflows based on router assets.
+  All routing logic is defined in workflow assets, not hardcoded.
+  Injections modify execution only at declared injection points.
+
+# =============================================================================
+# ROUTING PRINCIPLES
+# =============================================================================
+principles:
+  - "Router configuration comes from workflow assets"
+  - "No inline hardcoded routing logic"
+  - "Injections only at declared injection points"
+  - "Technical research gated by track (e.g., Enterprise only)"
+  - "Router changes don't require code changes"
+
+# =============================================================================
+# ROUTER TYPES
+# =============================================================================
+router_types:
+  selection_router:
+    description: "Routes based on user selection"
+    trigger: "user_input"
+    example: "Research type selection (market/domain/technical)"
+
+  condition_router:
+    description: "Routes based on evaluated conditions"
+    trigger: "condition_evaluation"
+    example: "Route to UX workflow if project has UI"
+
+  track_router:
+    description: "Routes based on selected track"
+    trigger: "track_selection"
+    example: "Enterprise track includes security workflow"
+
+  agent_router:
+    description: "Routes to appropriate agent for workflow"
+    trigger: "workflow_start"
+    example: "Research routed to analyst agent"
+
+# =============================================================================
+# ROUTER CONFIGURATION FORMAT
+# =============================================================================
+router_format:
+  description: "Standard format for router configuration in workflow assets"
+
+  schema:
+    router_id:
+      type: "string"
+      pattern: "^[a-z0-9-]+$"
+      description: "Unique identifier for router"
+
+    description:
+      type: "string"
+      description: "Human-readable router description"
+
+    selection_source:
+      type: "string"
+      enum: ["user_input", "condition", "track", "workflow_config"]
+      description: "How route is selected"
+
+    routes:
+      type: "array"
+      items:
+        type:
+          type: "string"
+          description: "Route type identifier"
+        path:
+          type: "string"
+          description: "Path to target workflow/step"
+        condition:
+          type: "string"
+          optional: true
+          description: "Condition expression for this route"
+        gate:
+          type: "string"
+          optional: true
+          description: "Track gate (e.g., 'track == enterprise')"
+        agent:
+          type: "string"
+          optional: true
+          description: "Agent to handle this route"
+
+# =============================================================================
+# PHASE 1 ROUTERS
+# =============================================================================
+phase1_routers:
+  research-type-router:
+    id: "research-type-router"
+    description: "Routes research workflow to type-specific steps"
+    selection_source: "user_input"
+    routes:
+      - type: "market"
+        path: "./market-steps/step-01-init.md"
+        condition: "research_type == 'market'"
+        agent: "analyst"
+
+      - type: "domain"
+        path: "./domain-steps/step-01-init.md"
+        condition: "research_type == 'domain'"
+        agent: "analyst"
+
+      - type: "technical"
+        path: "./technical-steps/step-01-init.md"
+        condition: "research_type == 'technical'"
+        gate: 'track == "enterprise"'
+        gate_message: "Technical research is available only in enterprise track"
+        agent: "analyst"
+
+  discovery-router:
+    id: "discovery-router"
+    description: "Routes to selected discovery workflows"
+    selection_source: "user_input"
+    routes:
+      - type: "brainstorm"
+        path: "{project-root}/_bmad/core/workflows/brainstorming/workflow.md"
+        condition: "brainstorm_requested == true"
+        agent: "analyst"
+
+      - type: "research"
+        path: "{project-root}/_bmad/bmm/workflows/1-analysis/research/workflow.md"
+        condition: "research_requested == true"
+        agent: "analyst"
+
+      - type: "product-brief"
+        path: "{project-root}/_bmad/bmm/workflows/1-analysis/create-product-brief/workflow.md"
+        condition: "product_brief_requested == true"
+        agent: "analyst"
+
+  track-router:
+    id: "track-router"
+    description: "Routes workflow path based on selected track"
+    selection_source: "track"
+    routes:
+      - type: "method-greenfield"
+        path: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/method-greenfield.yaml"
+        condition: "selected_track == 'method' and field_type == 'greenfield'"
+
+      - type: "method-brownfield"
+        path: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/method-brownfield.yaml"
+        condition: "selected_track == 'method' and field_type == 'brownfield'"
+
+      - type: "enterprise-greenfield"
+        path: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/enterprise-greenfield.yaml"
+        condition: "selected_track == 'enterprise' and field_type == 'greenfield'"
+
+      - type: "enterprise-brownfield"
+        path: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/enterprise-brownfield.yaml"
+        condition: "selected_track == 'enterprise' and field_type == 'brownfield'"
+
+# =============================================================================
+# INJECTION POINTS
+# =============================================================================
+injection_points:
+  description: "Declared points where behavior can be modified"
+
+  format:
+    injection_id:
+      type: "string"
+      description: "Unique identifier for injection point"
+    workflow:
+      type: "string"
+      description: "Workflow containing injection point"
+    location:
+      type: "string"
+      enum: ["before_step", "after_step", "replace_step"]
+      description: "Where injection occurs"
+    step:
+      type: "string"
+      description: "Step identifier"
+
+  phase1_injections:
+    - injection_id: "pre-brainstorm-context"
+      workflow: "brainstorming"
+      location: "before_step"
+      step: "session-setup"
+      description: "Inject project context before brainstorm"
+
+    - injection_id: "post-research-synthesis"
+      workflow: "research"
+      location: "after_step"
+      step: "completion"
+      description: "Inject additional synthesis after research"
+
+    - injection_id: "product-brief-template-override"
+      workflow: "create-product-brief"
+      location: "replace_step"
+      step: "template-loading"
+      description: "Use custom product brief template"
+
+# =============================================================================
+# DISPATCH OPERATIONS
+# =============================================================================
+operations:
+  route:
+    description: "Determine route based on router configuration"
+    inputs:
+      router_id: "string"
+      context: "object (contains selection source data)"
+    steps:
+      - "Load router configuration from workflow assets"
+      - "Evaluate selection source (user_input, condition, track)"
+      - "For each route, evaluate condition"
+      - "Check gate constraints if present"
+      - "Return first matching route"
+    returns:
+      matched: "boolean"
+      route:
+        type: "string"
+        path: "string"
+        agent: "string"
+      gate_blocked: "boolean"
+      gate_message: "string (if blocked)"
+
+  dispatch:
+    description: "Execute routed workflow"
+    inputs:
+      route: "route object from route() operation"
+      context: "execution context"
+    steps:
+      - "Verify route path exists"
+      - "Load target workflow/step"
+      - "Transfer context variables"
+      - "Execute target"
+      - "Return control to dispatcher"
+
+  inject:
+    description: "Apply injection at declared point"
+    inputs:
+      injection_id: "string"
+      injection_content: "string or path to content"
+    steps:
+      - "Verify injection point exists and is declared"
+      - "Load injection content"
+      - "Apply at specified location"
+      - "Continue workflow execution"
+
+# =============================================================================
+# TRACK GATES
+# =============================================================================
+track_gates:
+  description: "Gate certain workflows/routes by track selection"
+
+  enterprise_only:
+    description: "Available only in Enterprise track"
+    gates:
+      - workflow: "technical-research"
+        message: "Technical research requires Enterprise track"
+      - workflow: "security-review"
+        message: "Security review requires Enterprise track"
+      - workflow: "devops-planning"
+        message: "DevOps planning requires Enterprise track"
+
+  method_and_enterprise:
+    description: "Available in both Method and Enterprise tracks"
+    includes:
+      - "brainstorm"
+      - "market-research"
+      - "domain-research"
+      - "product-brief"
+      - "prd"
+      - "ux-design"
+      - "architecture"
+
+# =============================================================================
+# ERROR HANDLING
+# =============================================================================
+errors:
+  router_not_found:
+    code: "R001"
+    message: "Router '{router_id}' not found in workflow assets"
+    action: "Fail with clear error - no fallback"
+
+  no_matching_route:
+    code: "R002"
+    message: "No route matches selection '{selection}'"
+    action: "Prompt user to select valid option"
+
+  gate_blocked:
+    code: "R003"
+    message: "Route blocked by track gate: {gate_message}"
+    action: "Inform user of track requirement"
+
+  injection_point_not_declared:
+    code: "R004"
+    message: "Injection point '{injection_id}' not declared"
+    action: "Reject injection - not allowed outside declared points"
+
+  target_not_found:
+    code: "R005"
+    message: "Route target '{path}' not found"
+    action: "Fail with clear error about missing workflow asset"
+
+# =============================================================================
+# INTEGRATION
+# =============================================================================
+integration:
+  workflow_executor:
+    description: "Called when workflow encounters router directive"
+    trigger: "<router id='...'> tag in workflow"
+
+  orchestrator:
+    description: "Called to determine next workflow in sequence"
+    trigger: "Phase 1 step selection"
+
+  agent_selection:
+    description: "Determines which agent handles workflow"
+    trigger: "Workflow start"

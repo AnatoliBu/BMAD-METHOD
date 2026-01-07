@@ -1,0 +1,389 @@
+# Brainstorm Autopilot
+# Implements Principles #13 and #14: Autopilot mode for brainstorm step
+#
+# PLACEHOLDER FORMATS:
+# - {timestamp} - ISO 8601 datetime format: YYYY-MM-DDTHH-MM-SS (e.g., 2024-01-15T14-30-00)
+#   Note: Colons are replaced with hyphens for filesystem compatibility
+# - {iteration_number} - Integer iteration counter (1, 2, 3, ...)
+
+name: brainstorm-autopilot
+version: "1.0.0"
+description: |
+  Autonomous brainstorm execution with multiple internal agents.
+  Analyst agent handles convergence and structure.
+  Exploration agent handles divergence and creative alternatives.
+  Completion is artifact-driven, not conversational exhaustion.
+
+# =============================================================================
+# AUTOPILOT CONFIGURATION
+# =============================================================================
+configuration:
+  enabled_by: "autopilot=true parameter"
+  scope: "brainstorm step only"
+
+  constraints:
+    max_depth: 3
+    max_iterations: 10
+    iteration_timeout_seconds: 300
+
+  stop_conditions:
+    - condition: "completion_criteria_met"
+      description: "All required artifacts exist and pass validation"
+
+    - condition: "convergence_detected"
+      description: "No new ideas generated in last 2 iterations"
+
+    - condition: "user_stop"
+      description: "User explicitly requests stop"
+
+    - condition: "max_iterations_reached"
+      description: "Hit iteration limit"
+
+    - condition: "timeout"
+      description: "Overall session timeout exceeded"
+
+# =============================================================================
+# AGENT DEFINITIONS
+# =============================================================================
+agents:
+  analyst:
+    role: "Brainstorm / Analyst"
+    description: "Responsible for convergence and structure"
+
+    capabilities:
+      can_finalize_decisions: true
+      can_write_canonical_artifacts: true
+      can_modify_research_plan: true
+      can_commit_explorations: true
+
+    responsibilities:
+      - "Initialize brainstorm session with clear goals"
+      - "Filter exploration outputs for relevance"
+      - "Commit selected ideas to canonical artifacts"
+      - "Structure findings into project brief"
+      - "Document assumptions explicitly"
+      - "Create bounded research plan"
+      - "Evaluate completion criteria"
+      - "Finalize session with synthesis"
+
+    constraints:
+      - "Must evaluate all exploration outputs"
+      - "Cannot skip exploration filtering step"
+      - "Must document rejection rationale"
+
+  explorer:
+    role: "Exploration / Party Mode"
+    description: "Responsible for divergence and creative alternatives"
+
+    capabilities:
+      can_finalize_decisions: false
+      can_write_canonical_artifacts: false
+      can_modify_research_plan: false
+      can_commit_explorations: false
+
+    responsibilities:
+      - "Generate divergent ideas without judgment"
+      - "Explore unconventional alternatives"
+      - "Challenge assumptions"
+      - "Propose creative solutions"
+      - "Consider edge cases and 'black swan' events"
+      - "Push past obvious ideas"
+
+    constraints:
+      - "MUST NOT finalize any decisions"
+      - "MUST NOT write canonical artifacts"
+      - "MUST NOT modify research plan directly"
+      - "All outputs go to intermediate artifacts"
+
+    output_handling:
+      - "All outputs captured in intermediate artifacts"
+      - "Analyst filters and commits relevant content"
+
+# =============================================================================
+# INTERMEDIATE ARTIFACTS
+# =============================================================================
+intermediate_artifacts:
+  storage_path: "{planning_artifacts}/analysis/intermediate/"
+
+  explorations:
+    id: "explorations"
+    pattern: "explorations-{timestamp}.md"
+    description: "Creative alternatives explored by explorer agent"
+    structure: |
+      ---
+      timestamp: {timestamp}
+      iteration: {iteration_number}
+      agent: explorer
+      status: pending_review
+      ---
+
+      # Exploration Session {iteration_number}
+
+      ## Divergent Ideas
+      {list of ideas}
+
+      ## Unconventional Alternatives
+      {list of alternatives}
+
+      ## Challenged Assumptions
+      {list of challenged assumptions}
+
+      ## Edge Cases Considered
+      {list of edge cases}
+
+  alternatives:
+    id: "alternatives"
+    pattern: "alternatives-{timestamp}.md"
+    description: "Alternative approaches considered"
+    structure: |
+      ---
+      timestamp: {timestamp}
+      iteration: {iteration_number}
+      agent: explorer
+      status: pending_review
+      ---
+
+      # Alternatives Explored
+
+      ## Option 1: {name}
+      - Description: {description}
+      - Pros: {pros}
+      - Cons: {cons}
+      - Risk Level: {risk}
+
+      ## Option 2: {name}
+      ...
+
+  rejected_options:
+    id: "rejected-options"
+    pattern: "rejected-{timestamp}.md"
+    description: "Options explicitly rejected with rationale"
+    structure: |
+      ---
+      timestamp: {timestamp}
+      reviewed_by: analyst
+      ---
+
+      # Rejected Options
+
+      ## {option_name}
+      - Source: explorations-{source_timestamp}.md
+      - Rejection Reason: {reason}
+      - Documented by: analyst
+      - Timestamp: {review_timestamp}
+
+# =============================================================================
+# COMPLETION CRITERIA (Principle #14)
+# =============================================================================
+completion_criteria:
+  description: "Artifact-driven completion, not conversational exhaustion"
+
+  required_artifacts:
+    project_brief:
+      description: "Clear project vision and scope"
+      validation:
+        - "Section 'Vision' or 'Project Vision' exists"
+        - "Section 'Scope' or 'Project Scope' exists"
+        - "Minimum 100 words total"
+
+    assumptions:
+      description: "Explicit assumptions list"
+      validation:
+        - "Section 'Assumptions' exists"
+        - "At least 3 assumptions listed"
+        - "Each assumption is a declarative statement"
+
+    research_plan:
+      description: "Structured research plan"
+      validation:
+        - "Section 'Research Plan' or 'Next Steps' exists"
+        - "At least 1 research item identified"
+
+    open_questions:
+      description: "Bounded list of open questions (if any)"
+      validation:
+        - "If section exists, contains 10 or fewer items"
+        - "Each question contains a '?' character (it may be followed by other punctuation)"
+      optional: true
+
+  evaluation_order:
+    - "Check if all required artifacts exist"
+    - "Validate each artifact against criteria"
+    - "If all pass, completion achieved"
+    - "If any fail, continue iteration (if within limits)"
+
+# =============================================================================
+# AUTOPILOT WORKFLOW
+# =============================================================================
+workflow:
+  initialization:
+    step: 0
+    agent: "system"
+    actions:
+      - "Verify autopilot=true parameter"
+      - "Initialize iteration counter to 0"
+      - "Create intermediate artifact directory"
+      - "Set session start timestamp"
+
+  iteration_loop:
+    - step: 1
+      agent: "analyst"
+      title: "Set Convergence Goals"
+      actions:
+        - "Analyze current state of artifacts"
+        - "Identify gaps in completion criteria"
+        - "Set specific goals for this iteration"
+        - "Prepare exploration prompts"
+      output: "iteration_goals"
+
+    - step: 2
+      agent: "explorer"
+      title: "Generate Divergent Ideas"
+      actions:
+        - "Receive exploration prompts from analyst"
+        - "Generate divergent ideas without judgment"
+        - "Explore unconventional alternatives"
+        - "Challenge stated assumptions"
+        - "Consider edge cases"
+      output: "intermediate_artifacts/explorations"
+      constraints:
+        - "Do not finalize any decisions"
+        - "Do not modify canonical artifacts"
+
+    - step: 3
+      agent: "analyst"
+      title: "Filter and Commit"
+      actions:
+        - "Review exploration output"
+        - "Select relevant ideas for inclusion"
+        - "Document rejected options with rationale"
+        - "Commit selected content to appropriate artifacts"
+        - "Update research plan if new areas identified"
+      inputs:
+        - "intermediate_artifacts/explorations"
+      outputs:
+        - "canonical artifacts (project brief, assumptions, etc.)"
+        - "intermediate_artifacts/rejected-options"
+
+    - step: 4
+      agent: "analyst"
+      title: "Evaluate Completion"
+      actions:
+        - "Check all completion criteria"
+        - "Determine if artifacts are sufficient"
+        - "Check for convergence (new ideas declining)"
+        - "Check iteration limits"
+      decision:
+        if_complete: "proceed to finalization"
+        if_incomplete_and_within_limits: "loop back to step 1"
+        if_limits_reached: "proceed to finalization with incomplete flag"
+
+  finalization:
+    step: 5
+    agent: "analyst"
+    title: "Finalize Session"
+    actions:
+      - "Consolidate all canonical artifacts"
+      - "Generate session synthesis"
+      - "Update workflow status"
+      - "Archive intermediate artifacts"
+      - "Report completion status"
+    outputs:
+      - "brainstorm-session-{date}.md"
+      - "workflow-status update"
+
+# =============================================================================
+# CONVERGENCE DETECTION
+# =============================================================================
+convergence:
+  description: "Detect when brainstorm has exhausted productive exploration"
+
+  metrics:
+    new_ideas_count:
+      description: "Number of new ideas in iteration"
+      threshold: "< 3 for 2 consecutive iterations"
+
+    unique_themes:
+      description: "Number of distinct themes explored"
+      threshold: "No new themes for 2 iterations"
+
+    assumption_challenges:
+      description: "New assumptions challenged"
+      threshold: "No new challenges for 2 iterations"
+
+  action_on_convergence:
+    - "Log convergence detection"
+    - "Trigger early termination"
+    - "Include convergence note in synthesis"
+
+# =============================================================================
+# INCOMPLETE HANDLING (Principle #9)
+# =============================================================================
+incomplete_handling:
+  description: "How to handle termination without full completion"
+
+  recording_required:
+    - field: "blocked_reason"
+      description: "Why completion criteria weren't met"
+      example: "Max iterations reached with 2/4 criteria satisfied"
+
+    - field: "low_confidence_items"
+      description: "Artifacts that exist but may need refinement"
+      example: "Research plan has only 1 item"
+
+    - field: "open_questions"
+      description: "Questions that remain unanswered"
+      example: "What is the target market size?"
+
+  status_update:
+    - "Set artifact confidence to 'low'"
+    - "Add to review_required list"
+    - "Document incomplete reason in status"
+    - "Allow Phase 1 to complete with warnings"
+
+# =============================================================================
+# OUTPUT FORMAT
+# =============================================================================
+output_format:
+  session_document:
+    path: "{planning_artifacts}/analysis/brainstorm-session-{date}.md"
+    structure: |
+      ---
+      generated: {timestamp}
+      mode: autopilot
+      iterations: {count}
+      completion_status: {complete|incomplete}
+      confidence: {high|medium|low}
+      ---
+
+      # Brainstorm Session: {project_name}
+
+      ## Session Overview
+      - **Mode:** Autopilot
+      - **Iterations:** {count}
+      - **Completion:** {status}
+      - **Confidence:** {level}
+
+      ## Project Brief
+      {consolidated_project_brief}
+
+      ## Assumptions
+      {consolidated_assumptions}
+
+      ## Research Plan
+      {consolidated_research_plan}
+
+      ## Open Questions
+      {bounded_open_questions}
+
+      ## Ideas Explored
+      {summary_of_ideas}
+
+      ## Rejected Alternatives
+      {summary_of_rejections}
+
+      ## Session Synthesis
+      {final_synthesis}
+
+      ---
+      *Generated by BMAD Phase 1 Orchestrator in autopilot mode*

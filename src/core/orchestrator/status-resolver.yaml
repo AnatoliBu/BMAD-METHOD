@@ -1,0 +1,257 @@
+# Workflow Status Resolver
+# Implements status abstraction (Principle #6): Support both .md and .yaml,
+# and both project_root/ and docs/ locations.
+
+name: status-resolver
+version: "1.0.0"
+description: |
+  Resolves workflow status from multiple formats and locations.
+  Provides unified interface for reading/writing status regardless of format.
+
+# =============================================================================
+# STATUS FILE RESOLUTION
+# =============================================================================
+resolution:
+  description: "Find and parse the canonical workflow status"
+
+  search_order:
+    # Priority 1: YAML in planning artifacts (standard BMM location)
+    - pattern: "{planning_artifacts}/bmm-workflow-status.yaml"
+      format: "yaml"
+      priority: 1
+
+    # Priority 2: Markdown in planning artifacts
+    - pattern: "{planning_artifacts}/bmm-workflow-status.md"
+      format: "markdown"
+      priority: 2
+
+    # Priority 3: YAML in project root
+    - pattern: "{project-root}/bmm-workflow-status.yaml"
+      format: "yaml"
+      priority: 3
+
+    # Priority 4: Markdown in project root
+    - pattern: "{project-root}/bmm-workflow-status.md"
+      format: "markdown"
+      priority: 4
+
+    # Priority 5: YAML in docs folder
+    - pattern: "{project-root}/docs/bmm-workflow-status.yaml"
+      format: "yaml"
+      priority: 5
+
+    # Priority 6: Markdown in docs folder
+    - pattern: "{project-root}/docs/bmm-workflow-status.md"
+      format: "markdown"
+      priority: 6
+
+  resolution_algorithm: |
+    1. Load config to resolve {planning_artifacts} and {project-root}
+    2. Iterate through search_order by priority
+    3. For each pattern, check if file exists
+    4. Return first found file with its format
+    5. If no file found, return null with suggestion to run workflow-init
+
+# =============================================================================
+# FORMAT PARSERS
+# =============================================================================
+parsers:
+  yaml:
+    description: "Parse YAML workflow status file"
+    fields:
+      - name: "generated"
+        type: "datetime"
+        path: "generated"
+      - name: "project"
+        type: "string"
+        path: "project"
+      - name: "project_type"
+        type: "string"
+        path: "project_type"
+      - name: "selected_track"
+        type: "string"
+        path: "selected_track"
+      - name: "field_type"
+        type: "string"
+        path: "field_type"
+      - name: "workflow_path"
+        type: "string"
+        path: "workflow_path"
+      - name: "workflow_status"
+        type: "object"
+        path: "workflow_status"
+
+  markdown:
+    description: "Parse Markdown workflow status with YAML frontmatter"
+    frontmatter_fields:
+      - name: "generated"
+        type: "datetime"
+      - name: "project"
+        type: "string"
+      - name: "project_type"
+        type: "string"
+      - name: "selected_track"
+        type: "string"
+      - name: "field_type"
+        type: "string"
+      - name: "workflow_path"
+        type: "string"
+    body_sections:
+      - name: "workflow_status"
+        heading: "## Workflow Status"
+        format: "yaml_block"
+      - name: "artifacts"
+        heading: "## Artifacts"
+        format: "table"
+      - name: "key_findings"
+        heading: "## Key Findings"
+        format: "list"
+
+# =============================================================================
+# UNIFIED STATUS INTERFACE
+# =============================================================================
+interface:
+  description: "Unified interface for status operations"
+
+  read:
+    operation: "resolve_and_read"
+    returns:
+      status_exists: "boolean"
+      source_path: "string | null"
+      source_format: "yaml | markdown | null"
+      data:
+        project: "string"
+        project_type: "string"
+        selected_track: "string"
+        field_type: "string"
+        workflow_path: "string"
+        workflow_status: "object"
+        artifacts: "object"
+        phase_attribution: "object"
+        confidence: "object"
+        key_findings: "array"
+      suggestion: "string | null"
+
+  write:
+    operation: "update_status"
+    inputs:
+      action: "complete_workflow | skip_workflow | register_artifact | add_finding"
+      workflow_id: "string (for complete/skip)"
+      artifact_path: "string (for register)"
+      artifact_id: "string (for register)"
+      phase: "number (for register)"
+      confidence: "high | medium | low (for register)"
+      finding: "string (for add_finding)"
+    behavior: |
+      1. Resolve current status file location
+      2. Read existing content
+      3. Apply update based on action
+      4. Write back to same location in same format
+      5. Preserve all existing data and formatting
+
+  query:
+    operations:
+      - name: "get_next_workflow"
+        returns: "workflow_id and agent"
+      - name: "get_completed_workflows"
+        returns: "list of completed workflow_ids"
+      - name: "get_pending_workflows"
+        returns: "list of pending workflow_ids with status"
+      - name: "get_artifact_paths"
+        returns: "map of artifact_id to file_path"
+      - name: "get_phase1_complete"
+        returns: "boolean - whether Phase 1 gate is satisfied"
+
+# =============================================================================
+# EXTENDED STATUS FIELDS FOR ORCHESTRATOR
+# =============================================================================
+extended_fields:
+  description: "Additional fields tracked by orchestrator (not in base BMM)"
+
+  artifacts:
+    description: "Map of artifact_id to metadata"
+    schema:
+      artifact_id:
+        path: "string"
+        phase: "number"
+        confidence: "string"
+        created_at: "datetime"
+        workflow_id: "string"
+
+  phase_attribution:
+    description: "Map artifact to originating phase"
+    auto_populated: true
+    source: "artifacts[].phase"
+
+  confidence_levels:
+    description: "Confidence tracking for each artifact"
+    values:
+      high: "Artifact complete and verified"
+      medium: "Artifact complete but may need review"
+      low: "Artifact incomplete or has open questions"
+
+  key_findings:
+    description: "Notable findings from Phase 1 analysis"
+    schema:
+      - finding: "string"
+        source_artifact: "string"
+        confidence: "string"
+        timestamp: "datetime"
+
+  open_questions:
+    description: "Questions remaining after Phase 1"
+    schema:
+      - question: "string"
+        context: "string"
+        blocking: "boolean"
+        related_workflow: "string"
+
+# =============================================================================
+# BACKWARD COMPATIBILITY
+# =============================================================================
+compatibility:
+  description: "Ensure compatibility with existing BMM status files"
+
+  migration:
+    from_basic:
+      description: "Upgrade basic workflow_status to extended format"
+      steps:
+        - "Read existing workflow_status map"
+        - "For each completed workflow (value is file path):"
+        - "  - Add to artifacts with phase=inferred, confidence=medium"
+        - "Add empty key_findings and open_questions if not present"
+        - "Preserve all original fields"
+
+  downgrade:
+    description: "Produce basic status for tools that don't support extended"
+    steps:
+      - "Extract workflow_status map from extended format"
+      - "Write standard BMM status file"
+      - "Note: Extended fields preserved in separate section"
+
+# =============================================================================
+# COMMANDS
+# =============================================================================
+commands:
+  /workflow-status:
+    description: "Display resolved workflow status"
+    implementation: |
+      1. Call resolve_and_read()
+      2. If status_exists == false, show suggestion
+      3. Format and display status summary
+      4. Show next workflow recommendation
+
+  /workflow-status --validate:
+    description: "Validate status file against orchestrator requirements"
+    implementation: |
+      1. Call resolve_and_read()
+      2. Check all required fields present
+      3. Validate artifact paths exist on disk
+      4. Report validation results
+
+  /workflow-status --update:
+    description: "Update status with new information"
+    implementation: |
+      1. Parse update parameters
+      2. Call write() with appropriate action
+      3. Confirm update completed

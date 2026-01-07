@@ -22,3 +22,41 @@ selected_track: "{{selected_track}}"
 field_type: "{{field_type}}"
 workflow_path: "{{workflow_path_file}}"
 workflow_status: "{{workflow_items}}"
+
+# =============================================================================
+# ORCHESTRATOR EXTENDED FIELDS (Optional - populated by Phase 1 Orchestrator)
+# =============================================================================
+# These fields enable artifact tracking, confidence levels, and findings
+# for use by the orchestrated execution layer. They are backward compatible
+# and can be omitted if not using the orchestrator.
+
+# Artifact Registry - Maps artifact IDs to metadata
+# artifacts:
+#   product-brief:
+#     path: "docs/product-brief.md"
+#     phase: 1
+#     confidence: "high"
+#     created_at: "2024-01-01T00:00:00Z"
+#     workflow_id: "create-product-brief"
+
+# Phase Attribution - Maps artifacts to originating phase
+# phase_attribution:
+#   product-brief: 1
+#   brainstorm-session: 1
+
+# Confidence Levels - Tracks confidence for each artifact
+# confidence:
+#   product-brief: "high"
+#   brainstorm-session: "medium"
+
+# Key Findings - Notable findings from Phase 1 analysis
+# key_findings:
+#   - finding: "Target market is SMB sector"
+#     source_artifact: "research-market"
+#     confidence: "high"
+
+# Open Questions - Questions remaining after Phase 1
+# open_questions:
+#   - question: "What is the pricing strategy?"
+#     context: "Needs competitive analysis"
+#     blocking: false
